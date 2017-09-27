@@ -104,11 +104,11 @@ class BSS:
         self.__check_params_cosnsistency(params)
         self.__check_out_path_consistency(out_path)
        
-        results = self.volume_factorization(self, data, mask, params, out_path, s_prior, t2_bounds, run_parallel)
+        results = self._volume_factorization(data, mask, params, out_path, s_prior, t2_bounds, run_parallel)
         
         return results
     
-    def _volume_factorization(self, data, mask, params, s_prior, out_path, t2_bounds, run_parallel):
+    def _volume_factorization(self, data, mask, params, out_path, s_prior, t2_bounds, run_parallel):
         """ Iterates over all the voxels in the volume and performs BSS in each of them.
         """
         
@@ -177,21 +177,47 @@ class BSS:
             t2[f == 0] = 0
             return {'t2': t2, 'f': f, 's0': np.round(s0,3), 'nsources': nsources, 'sources': np.round(S,3), 'A': np.round(A,3)}
         
-    def fwe(self, data, mask, b_values):
+    def fwe(self, data, mask, b_values, out_path):
         """Free-water elimination method.
         
-        All the necessary assumptions on tissue relaxation and diffusivity are encoded in this function.
+        All the necessary assumptions on tissue relaxation and diffusivity are encoded in this function. 
+        Notice that it always tries to run in parallel.
         
         Usage::
         
-        :param data:
-        :param mask:
-        :param b_values:        
+        :param data: Dictionary containing the fields 'dwi' and 'TE'. 'dwi' contains a list of nifti files 
+                     with the diffusion data to build X. 'TE' is the echo time value at which each dwi was
+                     acquired, the order and number of elements of 'dwi' and 'TE' must match.
+        :param mask: Path to the mask file.
+        :param b_values: Path to the *.bval file. Units must be mm^2/s.
+        :param out_path: Path where the output files will be created.
+        
+        :raise BssExcpetion: When there is an error in the input parameters.
+        
+        :rtype: Dictionary
+        :return: Nifti files containing the results: 'sources', 't2s', 'fs', 's0', and 'rerror'. 
         """
         
+        # Check b values consistency
+        if b_values == None:
+            raise BssException("b_values is a mandatory parameter")
+    
+        if not os.path.exists(b_values):
+            raise BssException('Wrong path to b_values')
+                
+        # Read bo
+        bval = np.fromfile(b_values, float, -1, sep=' ')
+        if 0 not in bval:
+            raise BssException('At least one b0 is required')
         
+        # Define priors on CSF
+        Dcsf = 3e-3; # mm^2/s
+        Scsf = np.exp(-bval * Dcsf)
+        t2_bounds = {'1': [0.040, 0.150], '2': [1, 3]}
+        s_prior = {'2': Scsf}
+        params = {'max_sources': 2,'max_iters': 10}
         
-        return
+        return self.factorize(data, mask, params, out_path, s_prior, t2_bounds, False)
     
     
 class BssException(Exception):

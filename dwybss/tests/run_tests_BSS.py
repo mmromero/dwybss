@@ -176,7 +176,7 @@ class TestBss(unittest.TestCase):
         data = {'dwi': dwi, 'te': TE}
         mask = os.path.join(cwd,'mask.nii.gz')
         
-        niiout = obss._volume_factorization(data, mask, params, None, self.out_path, None, True)
+        niiout = obss._volume_factorization(data, mask, params, self.out_path, None, None, True)
         
         self.assertIsNotNone(niiout, 'Missing Result')
         self.assertEqual(len(niiout['T2']), max_sources, 'Incorrect number of T2 files');
@@ -204,7 +204,7 @@ class TestBss(unittest.TestCase):
         data = {'dwi': dwi, 'te': TE}
         mask = os.path.join(cwd,'mask.nii.gz')
         
-        niiout = obss._volume_factorization(data, mask, params, None, self.out_path, None, False)
+        niiout = obss._volume_factorization(data, mask, params, self.out_path, None, None, False)
         
         self.assertIsNotNone(niiout, 'Missing Result')
         self.assertEqual(len(niiout['T2']), max_sources, 'Incorrect number of T2 files');
@@ -333,6 +333,75 @@ class TestBss(unittest.TestCase):
         np.testing.assert_array_almost_equal(result['t2'], t2, 6, 'Wrong T2 values')
         np.testing.assert_array_almost_equal(result['f'], f, 6, 'Wrong f values')
         self.assertEqual(result['s0'], 1, 'Wrong S0 value')
+        
+    def testFweNoneBval(self):
+        obss = bss.BSS()
+        dwi = ['data_TE1.nii.gz', 'data_TE2.nii.gz']
+        TE = [60, 120]
+        data = {'dwi': dwi, 'te': TE}
+        mask = 'mask.nii.gz'
+        b_values = None
+        
+        with self.assertRaises(bss.BssException) as context:
+            results = obss.fwe(data, mask, b_values, self.out_path)
+            self.assertIsNone(results, 'Unexpected result')
+            self.assertTrue('b_values is a mandatory parameter' in context.exception)
+        
+        
+    def testFweWrongBval(self):
+        obss = bss.BSS()
+        dwi = ['data_TE1.nii.gz', 'data_TE2.nii.gz']
+        TE = [60, 120]
+        data = {'dwi': dwi, 'te': TE}
+        mask = 'mask.nii.gz'
+        b_values = '/test.bval'
+        
+        with self.assertRaises(bss.BssException) as context:
+            results = obss.fwe(data, mask, b_values, self.out_path)
+            self.assertIsNone(results, 'Unexpected result')
+            self.assertTrue('b_values is a mandatory parameter' in context.exception)
+        
+    def testFweNonB0(self):
+        obss = bss.BSS()
+        dwi = ['data_TE1.nii.gz', 'data_TE2.nii.gz']
+        TE = [60, 120]
+        data = {'dwi': dwi, 'te': TE}
+        mask = 'mask.nii.gz'
+        cwd = os.path.join(os.getcwd(), '..', 'examples', 'data')
+        b_values = os.path.join(cwd,'test_no_B0.bval')
+        
+        with self.assertRaises(bss.BssException) as context:
+            results = obss.fwe(data, mask, b_values, self.out_path)
+            self.assertIsNone(results, 'Unexpected result')
+            self.assertTrue('At least one b0 is required' in context.exception)
+
+    def testFweWithB0(self):
+        obss = bss.BSS()
+        max_sources = 2
+        TE = [0.0751, 0.1351]       
+        cwd = os.path.join(os.getcwd(), '..', 'examples', 'data')
+        dwi = [os.path.join(cwd,'data_TE1.nii.gz'), os.path.join(cwd,'data_TE2.nii.gz')]
+        data = {'dwi': dwi, 'te': TE}
+        mask = os.path.join(cwd,'mask.nii.gz')
+        b_values = os.path.join(cwd,'test.bval')
+        
+        niiout = obss.fwe(data, mask, b_values, self.out_path)
+        self.assertIsNotNone(niiout, 'Missing Result')
+        self.assertEqual(len(niiout['T2']), max_sources, 'Incorrect number of T2 files');
+        self.assertEqual(len(niiout['f']), max_sources, 'Incorrect number of volume fraction files');
+        self.assertEqual(len(niiout['sources']), max_sources, 'Incorrect number of source files');
+        self.assertIsNotNone(niiout['pd'], 'No Proton Density file');
+        self.assertIsNotNone(niiout['rel_error'], 'No Relative Error file');     
+        self.assertTrue(os.path.isfile(niiout['pd']), 'Non existing proton density file') 
+        self.assertTrue(os.path.isfile(niiout['rel_error']), 'Non existing relative error file')  
+        for i in range(max_sources):
+            self.assertTrue(os.path.isfile(niiout['T2'][i]), 'Non existing T2 file') 
+            self.assertTrue('T2_' in niiout['T2'][i],'Wrong Name for T2 file')
+            self.assertTrue(os.path.isfile(niiout['f'][i]), 'Non existing volume fraction file')  
+            self.assertTrue('f_' in niiout['f'][i],'Wrong Name for volume fraction file')
+            self.assertTrue(os.path.isfile(niiout['sources'][i]), 'Non existing source file')   
+            self.assertTrue('source_' in niiout['sources'][i],'Wrong Name for source file')
+        
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
