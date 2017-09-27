@@ -4,10 +4,13 @@ Created on 8 Sep 2017
 Root class for all the bss methods (scalability)
 
 @author: Miguel Molina Romero
+@contact: miguel.molina@tum.de
+@license: LPGL
 '''
 
 import nibabel as nib
 import numpy as np
+import dwybss.bss.utils as ut
 import os
 from joblib import Parallel, delayed
 
@@ -65,9 +68,9 @@ class BSS:
         if params['max_sources'] < 1:
             raise BssException('The parameter max_sources must be >= 1.')
          
-        self.__check_method_params_consistency(params)
+        self._check_method_params_consistency(params)
     
-    def __check_method_params_consistency(self, params):
+    def _check_method_params_consistency(self, params):
         """TO BE IMPLEMENTED BY THE SPECIFIC METHOD"""
     
     def factorize(self, data, mask, params, out_path, s_prior = None, t2_bounds = None, run_parallel = True ):
@@ -128,14 +131,51 @@ class BSS:
             num_cpus = 1
             
         result =  OutputResults(res,params['max_sources'], nii.header, out_path)    
-        Parallel(n_jobs=num_cpus, backend='threading')(delayed(self._method_factorization)(X[r,c,s,:,:], msk, params, result, s_prior, t2_bounds) for r in range(res[0]) for c in range(res[1]) for s in range(res[2]))
+        Parallel(n_jobs=num_cpus, backend='threading')(delayed(self._method_factorization)(X[r,c,s,:,:], data['te'], msk[r,c,s], params, result, r, c, s, s_prior, t2_bounds) for r in range(res[0]) for c in range(res[1]) for s in range(res[2]))
     
         # Save results
         return result.save()
         
     
-    def _method_factorization(self, data, mask, params, results, s_prior = None, t2_bounds = None):
+    def _method_factorization(self, data, tes, mask, params, results, r, c, s, s_prior = None, t2_bounds = None):
         """TO BE IMPLEMENTED BY THE SPECIFIC METHOD"""
+        
+    def _compute_actual_A(self, X, A, tes, params):
+        
+        max_sources = params['max_sources']
+        dims = np.shape(A)
+        t2 = list()
+        
+        for c in range(dims[1]):        
+            t2.append(ut.t2_from_slope(A[:,c], tes))
+        
+        t2 = np.round(t2,3)
+        
+        A = np.round(np.exp(-tes * (1./(t2 + 1e-6))),5)
+        nsources = np.linalg.matrix_rank(A)
+        
+        if nsources == 0:
+            return {'t2': np.zeros(max_sources), 'f': np.zeros(max_sources), 's0': 0, 'nsources': nsources, 
+                    'sources': np.zeros(np.shape(X)), 'A': np.zeros(dims)}
+        elif nsources == 1:
+            f = np.zeros(np.shape(t2))
+            f[t2 > 0] = 1
+            s0 = np.max(X[0,:]) / np.exp(-tes[0]/t2[t2 > 0])[0]
+            A = A / np.linalg.norm(A)
+            return {'t2': t2, 'f': f, 's0': np.round(s0,3), 'nsources': nsources, 'sources': X[0,:], 'A': np.round(A,3)}
+        else:
+            Xmax = np.max(X, 1)
+            f = np.linalg.lstsq(A,Xmax[:, None])[0]
+            f[f < 0] = 0
+            s0 = np.sum(f)
+            f = f / s0
+            f = f.transpose()[0]
+            f = np.round(f,3)
+            A = A * f
+            nsources = np.linalg.matrix_rank(A)
+            S = np.linalg.lstsq(A,X)[0]
+            t2[f == 0] = 0
+            return {'t2': t2, 'f': f, 's0': np.round(s0,3), 'nsources': nsources, 'sources': np.round(S,3), 'A': np.round(A,3)}
         
     def fwe(self, data, mask, b_values):
         """Free-water elimination method.
@@ -178,6 +218,7 @@ class OutputResults():
         self.T2 = np.zeros([res[0], res[1], res[2], max_sources])
         self.f =  np.zeros([res[0], res[1], res[2], max_sources])
         self.pd = np.zeros([res[0], res[1], res[2]])
+        self.nsources = np.zeros([res[0], res[1], res[2]])
         self.sources = np.zeros([res[0], res[1], res[2], max_sources, res[3]])
         self.rel_error = np.zeros([res[0], res[1], res[2]])
         self.nii_header = nii_header
@@ -210,5 +251,6 @@ class OutputResults():
             
         files = {'T2': T2, 'f': f, 'sources': sources}
         files['pd'] = self.__save_file(self.pd, 'pd')
+        files['nsources'] = self.__save_file(self.nsources, 'nsources')
         files['rel_error'] = self.__save_file(self.rel_error, 'rel_error')
         return files        

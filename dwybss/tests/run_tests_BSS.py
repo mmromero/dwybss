@@ -1,13 +1,15 @@
 '''
-Created on 8 Sep 2017
+Created on 26 Sep 2017
 
-@author: miguel
+@author: Miguel Molina Romero
+@contact: miguel.molina@tum.de
+@license: LPGL
 '''
 import unittest
-import nibabel as nib
+import numpy as np
 import os
 import shutil
-from dwybss.bss import bss
+from dwybss.bss import bss, utils
 
 class TestBss(unittest.TestCase):
 
@@ -25,7 +27,7 @@ class TestBss(unittest.TestCase):
         obss = bss.BSS()
         data = None
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 0, 'max_sources': 2}
+        params = {'max_sources': 2}
                 
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -38,7 +40,7 @@ class TestBss(unittest.TestCase):
         TE = [60, 120]
         data = {'dwi': dwi, 'te': TE}        
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 0, 'max_sources': 2}
+        params = {'max_sources': 2}
                 
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -51,7 +53,7 @@ class TestBss(unittest.TestCase):
         TE = None
         data = {'dwi': dwi, 'te': TE}        
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 0, 'max_sources': 2}
+        params = {'max_sources': 2}
                 
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -63,7 +65,7 @@ class TestBss(unittest.TestCase):
         TE = [60, 120]
         data = {'te': TE}        
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 0, 'max_sources': 2}
+        params = {'max_sources': 2}
                 
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -75,7 +77,7 @@ class TestBss(unittest.TestCase):
         dwi = ['data_TE1.nii.gz', 'data_TE2.nii.gz']
         data = {'dwi': dwi}        
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 0, 'max_sources': 2}
+        params = {'max_sources': 2}
                 
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -88,7 +90,7 @@ class TestBss(unittest.TestCase):
         TE = [60, 120]
         data = {'dwi': dwi, 'te': TE}
         mask = None
-        params = {'maxiters': 100, 's_priors': 1, 'max_sources': 2}
+        params = {'max_sources': 2}
         
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -101,7 +103,7 @@ class TestBss(unittest.TestCase):
         TE = [60, 120]
         data = {'dwi': dwi, 'te': TE}
         mask = []
-        params = {'maxiters': 100, 's_priors': 1, 'max_sources': 2}
+        params = {'max_sources': 2}
         
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -128,7 +130,7 @@ class TestBss(unittest.TestCase):
         TE = [60]
         data = {'dwi': dwi, 'te': TE}
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 1, 'max_sources': 2}
+        params = {'max_sources': 2}
         
         with self.assertRaises(bss.BssException) as context:
             results = obss.factorize(data, mask, params,'/')
@@ -141,7 +143,7 @@ class TestBss(unittest.TestCase):
         TE = [60, 120]
         data = {'dwi': dwi, 'te': TE}
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 1, 'max_sources': 2}
+        params = {'max_sources': 2}
         out_path = None
         
         with self.assertRaises(bss.BssException) as context:
@@ -155,7 +157,7 @@ class TestBss(unittest.TestCase):
         TE = [60, 120]
         data = {'dwi': dwi, 'te': TE}
         mask = 'mask.nii.gz'
-        params = {'maxiters': 100, 's_priors': 1, 'max_sources': 2}
+        params = {'max_sources': 2}
         out_path = '/bss_test_doesnt_exist'
         
         with self.assertRaises(bss.BssException) as context:
@@ -220,54 +222,117 @@ class TestBss(unittest.TestCase):
             self.assertTrue(os.path.isfile(niiout['sources'][i]), 'Non existing source file')   
             self.assertTrue('source_' in niiout['sources'][i],'Wrong Name for source file')
         
-
-class TestOutputResult(unittest.TestCase):
+    def testComputeActualAwithNaN(self):
+        t2  = np.array([0.075, 2])
+        tes = np.array([0.07, 0.13])
+        tes = tes[:, np.newaxis]
+        f = np.array([0.7, 0.3])
+        (A, _) = utils.build_A(t2,tes,f)
+                
+        S = np.random.random((2, 30))
+        S[:,0] = 1
+        X = np.dot(A,S)
+        
+        A[1,1] = np.nan
+        
+        params = {'max_sources': 2}
+        obss = bss.BSS()
+        result = obss._compute_actual_A(X, A, tes, params)
+        np.testing.assert_array_almost_equal(result['t2'], [0.075, 0], 6, 'Wrong T2 values')
+        np.testing.assert_array_almost_equal(result['f'], [1, 0], 6, 'Wrong f values')
+        
+        
+    def testComputeActualAwithInf(self):
+        t2  = np.array([0.075, 2])
+        tes = np.array([0.07, 0.13])
+        tes = tes[:, np.newaxis]
+        f = np.array([0.7, 0.3])
+        (A, _) = utils.build_A(t2,tes,f)
+                
+        S = np.random.random((2, 30))
+        S[:,0] = 1
+        X = np.dot(A,S)
+        
+        A[1,1] = np.inf
+        
+        params = {'max_sources': 2}
+        obss = bss.BSS()
+        result = obss._compute_actual_A(X, A, tes, params)
+        np.testing.assert_array_almost_equal(result['t2'], [0.075, 0], 6, 'Wrong T2 values')
+        np.testing.assert_array_almost_equal(result['f'], [1, 0], 6, 'Wrong f values')
     
-    def setUp(self):
-        self.out_path = os.path.join(os.getcwd(), 'test_files')
-        shutil.rmtree(self.out_path, True)
-        os.makedirs(self.out_path)
-        pass
-        
-    def tearDown(self):
-        shutil.rmtree(self.out_path)
-        pass
+    def testComputeActualAwithZero(self):
+        t2  = np.array([0.075, 2])
+        tes = np.array([0.07, 0.13])
+        tes = tes[:, np.newaxis]
+        f = np.array([1, 0])
+        (A, _) = utils.build_A(t2,tes,f)
+                
+        S = np.random.random((2, 30))
+        S[:,0] = 1
+        X = np.dot(A,S)
+                
+        params = {'max_sources': 2}
+        obss = bss.BSS()
+        result = obss._compute_actual_A(X, A, tes, params)
+        np.testing.assert_array_almost_equal(result['t2'], [0.075, 0], 6, 'Wrong T2 values')
+        np.testing.assert_array_almost_equal(result['f'], [1, 0], 6, 'Wrong f values')
+        np.testing.assert_array_almost_equal(result['s0'], 1, 6, 'Wrong S0 value')    
     
-    def testCreateResultObject(self):
-        res = [96, 96, 25, 31]
-        max_sources = 2
-        nii_header = nib.Nifti1Header()
-        result = bss.OutputResults(res, max_sources, nii_header, self.out_path)
-        self.assertIsNotNone(result, 'Null result not expected')
+    def testComputeActualANonExisitngSource(self):
+        t2  = np.array([0.075, 2])
+        tes = np.array([0.07, 0.13])
+        tes = tes[:, np.newaxis]
+        f = np.array([1, 0])
+        A = np.exp(-tes * (1./t2) )
+                
+        S = np.random.random(30)
+        S[0] = 1
+        S = np.stack((S, np.zeros(30)))
+        X = np.dot(A,S)
+                
+        params = {'max_sources': 2}
+        obss = bss.BSS()
+        result = obss._compute_actual_A(X, A, tes, params)
+        np.testing.assert_array_almost_equal(result['t2'], [0.075, 0], 6,'Wrong T2 values')
+        np.testing.assert_array_almost_equal(result['f'], [1, 0], 6, 'Wrong f values')
+        np.testing.assert_array_almost_equal(result['s0'], 1, 6, 'Wrong S0 value')
 
-    def testSaveResultObject(self):
-        res = [96, 96, 25, 31]
-        max_sources = 2
-        nii_header = nib.Nifti1Header()
+    def testComputeActualA2ExisitingSources(self):
+        t2  = np.array([0.075, 2])
+        tes = np.array([0.07, 0.13])
+        tes = tes[:, np.newaxis]
+        f = np.array([0.7, 0.3])
+        (A, _) = utils.build_A(t2,tes,f)
+                
+        S = np.random.random((2, 30))
+        S[:,0] = 1
+        X = np.dot(A,S)
         
-        result = bss.OutputResults(res, max_sources, nii_header, self.out_path)
-        self.assertIsNotNone(result, 'Null result not expected')        
-        
-        niiout = result.save()
-        
-        self.assertEqual(len(niiout['T2']), max_sources, 'Incorrect number of T2 files');
-        self.assertEqual(len(niiout['f']), max_sources, 'Incorrect number of volume fraction files');
-        self.assertEqual(len(niiout['sources']), max_sources, 'Incorrect number of source files');
-        self.assertIsNotNone(niiout['pd'], 'No Proton Density file');
-        self.assertIsNotNone(niiout['rel_error'], 'No Relative Error file');     
-        
-        for i in range(max_sources):
-            self.assertTrue(os.path.isfile(niiout['T2'][i]), 'Non existing T2 file') 
-            self.assertTrue('T2_' in niiout['T2'][i],'Wrong Name for T2 file')
-            self.assertTrue(os.path.isfile(niiout['f'][i]), 'Non existing volume fraction file')  
-            self.assertTrue('f_' in niiout['f'][i],'Wrong Name for volume fraction file')
-            self.assertTrue(os.path.isfile(niiout['sources'][i]), 'Non existing source file')   
-            self.assertTrue('source_' in niiout['sources'][i],'Wrong Name for source file')
-            
-        
-        self.assertTrue(os.path.isfile(niiout['pd']), 'Non existing proton density file') 
-        self.assertTrue(os.path.isfile(niiout['rel_error']), 'Non existing relative error file')     
-        
+        params = {'max_sources': 2}
+        obss = bss.BSS()
+        result = obss._compute_actual_A(X, A, tes, params)
+        np.testing.assert_array_almost_equal(result['t2'], t2, 6, 'Wrong T2 values')
+        np.testing.assert_array_almost_equal(result['f'], f, 6, 'Wrong f values')
+        np.testing.assert_array_almost_equal(result['s0'], 1, 6, 'Wrong S0 value')
+
+    def testComputeActualA3ExisitingSources(self):
+        t2  = np.array([0.075, 0.15, 2])
+        tes = np.array([0.07, 0.13, 0.2])
+        tes = tes[:, np.newaxis]
+        f = np.array([0.5, 0.3, 0.2])
+        (A, _) = utils.build_A(t2,tes,f)
+                
+        S = np.random.random((3, 30))
+        S[:,0] = 1
+        X = np.dot(A,S)
+                
+        params = {'max_sources': 3}
+        obss = bss.BSS()
+        result = obss._compute_actual_A(X, A, tes, params)
+        np.testing.assert_array_almost_equal(result['t2'], t2, 6, 'Wrong T2 values')
+        np.testing.assert_array_almost_equal(result['f'], f, 6, 'Wrong f values')
+        self.assertEqual(result['s0'], 1, 'Wrong S0 value')
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
