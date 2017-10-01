@@ -29,8 +29,8 @@ def t2_from_slope(a,tes):
     
     # Calculate m
     m = np.divide(alte, aste)
-    m[m <= 0] = 1e-6
-    m[m >= 1] = 1 - 1e-6
+    m[m <= 0] = 1e-8
+    m[m >= 1] = 1 - 1e-8
     
     # Calculate T2
     t2 = np.divide((tes[ste] - tes[lte]).transpose()[0],np.log(m))
@@ -68,6 +68,6 @@ def build_A(t2, tes, f):
     A = np.exp(-tes * (1./t2) )
     A = A * f
     Anorm = np.linalg.norm(A, None, 0)
-    Anorm[Anorm == 0] = 1e-6
+    Anorm[Anorm == 0] = 1e-8
     Anorm = np.divide(A, Anorm)
     return (A, Anorm)
