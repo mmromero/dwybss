@@ -153,6 +153,9 @@ class BSS:
         
         t2 = np.round(t2,3)
         
+        # Any t2 < 5ms is due to erros, we cannot detect it in clinical scanners
+        t2[t2 < 0.005] = 0
+        
         A = np.exp(-tes * (1./(t2 + 1e-8)))
         nsources = np.linalg.matrix_rank(A)
         

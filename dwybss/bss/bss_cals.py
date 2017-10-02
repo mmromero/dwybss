@@ -42,9 +42,6 @@ class BssCals(BSS):
         Factorization, Computational Statistics and Data Analysis, vol. 52, no. 1, pp. 155-173.
         """
         
-#         if not (r == 48 and c == 49 and s == 13):
-#             return
-        
         X = np.squeeze(data)
         mask = np.squeeze(mask)
         
