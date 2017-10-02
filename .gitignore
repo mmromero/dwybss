@@ -9,6 +9,9 @@ __pycache__/
 # C extensions
 *.so
 
+# examples
+dwybss/examples/output/
+
 # Distribution / packaging
 .Python
 env/
