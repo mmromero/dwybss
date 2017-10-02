@@ -3,7 +3,7 @@ Created on 8 Sep 2017
 
 Root class for all the bss methods (scalability)
 
-@author: Miguel Molina Romero
+@author: Miguel Molina Romero, Techical University of Munich
 @contact: miguel.molina@tum.de
 @license: LPGL
 '''
@@ -19,7 +19,7 @@ class BSS:
     """Blind Source separation parent class
     
     Functions: 
-    factorize: for general purpose applications of BSS
+    factorize: for general purpose applications of BSS.
     
     fwe: specifically designed for Free Water Elimination. 
     """
@@ -88,9 +88,9 @@ class BSS:
         :param out_path: Path where the output files will be created.
         :param s_prior: Dictionary with prior knowledge for one or more sources. 'source' is the index of 
                         the column matrix of A associated with the source. 'data' is an array containing 
-                        the actual information. ``s_prior = {'1':[1 0.2 0.4 ...], '3': [1 0.45 0.90 ....]}
+                        the actual information. ``s_prior = {'1':[1, 0.2, 0.4, ...], '3': [1, 0.45, 0.90, ....]}
         :param t2_bounds: Dictionary containing the bounds for the T2 value of the columns of A: 
-                        ``t2_bounds = {'1': [0 0.04], '3': [2000 2000]}`
+                        ``t2_bounds = {'1': [0, 0.04], '3': [2000, 2000]}`
         :param run_parallel: True to use all the CPUs. False to do not parallelize execution.
         
         :raise BssExcpetion: When there is an error in the input parameters.
@@ -124,10 +124,6 @@ class BSS:
             nii = nib.load(data['dwi'][i])
             niidata = nii.get_data()
             X[:,:,:,i,:] = niidata
-#             for r in range(res[0]):
-#                 for c in range(res[1]):
-#                     for s in range(res[2]):
-#                         X[r,c,s,i,:] = niidata[r,c,s,:]
             
         # Lunch BSS over the volume
         if run_parallel:
@@ -146,7 +142,8 @@ class BSS:
         """TO BE IMPLEMENTED BY THE SPECIFIC METHOD"""
         
     def _compute_actual_A(self, X, A, tes, params):
-        
+        """Computes T2, f, proton density and sources from factorized A and the measurements X.
+        """
         max_sources = params['max_sources']
         dims = np.shape(A)
         t2 = list()
@@ -162,14 +159,6 @@ class BSS:
         if nsources == 0:
             return {'t2': np.zeros(max_sources), 'f': np.zeros(max_sources), 's0': 0, 'nsources': nsources, 
                     'sources': np.zeros(np.shape(X)), 'A': np.zeros(dims)}
-        elif nsources == 1:
-            f = np.zeros(np.shape(t2))
-            f[t2 > 0] = 1
-            s0 = np.max(X[0,:]) / np.exp(-tes[0]/t2[t2 > 0])[0]
-            A = A / np.linalg.norm(A)
-            S = np.zeros(np.shape(X))
-            S[t2>0,:] = X[0,:]
-            return {'t2': t2, 'f': f, 's0': np.round(s0,3), 'nsources': nsources, 'sources': S, 'A': A}
         else:
             Xmax = np.max(X, 1)
             f = np.linalg.lstsq(A,Xmax[:, None])[0]
@@ -238,48 +227,64 @@ class BssException(Exception):
         
         
 class OutputResults():
-    
-    def setUp(self):
-        pass
-        
-    def tearDown(self):
-        pass
-    
-    
+    """Storage object to keep and save the factorization results.  
+    """
     def __init__(self, res, max_sources, nii_header, out_path):
-        self.max_sources = max_sources
+        """An OutputResult object is defined by the image resolution to be stored and saved,
+        the maximum number of sources, the voxel dimensions included in the Nifti header,
+        and the output path for the factorization results that will be stored in Nifti format.
+                
+        :param res: Four elements list containing the number of rows, columns, slices, and diffusion directions in this order.
+        :param max_sources: Maximum number of sources as defined in the `param` dictionary
+        :param nii_header: Nifti header of the one of the `dwi` files containing the voxel dimensions and affine.
+        :param out_path: Existing directory to save the output Nifti files.
+        
+        :ivar T2: Matrix of shape (res[0], res[1], res[2], max_sources) that stores the resulting T2 values.
+        :ivar f: Matrix of shape (res[0], res[1], res[2], max_sources) that stores the resulting f values.
+        :ivar pd: Matrix of shape (res[0], res[1], res[2]) that stores the resulting proton density value.
+        :ivar nsources: Matrix of shape (res[0], res[1], res[2]) that stores the resulting number of sources per voxel.
+        :ivar sources: Matrix of shape (res[0], res[1], res[2], max_sources, diff_directions ) that stores the resulting sources.
+        :ivar rel_error: Matrix of shape (res[0], res[1], res[2]) that stores the resulting factorization relative error. 
+        """
+        self.__max_sources = max_sources
+        self.__nii_header = nii_header
+        self.__out_path = out_path
         self.T2 = np.zeros([res[0], res[1], res[2], max_sources])
         self.f =  np.zeros([res[0], res[1], res[2], max_sources])
         self.pd = np.zeros([res[0], res[1], res[2]])
         self.nsources = np.zeros([res[0], res[1], res[2]])
         self.sources = np.zeros([res[0], res[1], res[2], max_sources, res[3]])
         self.rel_error = np.zeros([res[0], res[1], res[2]])
-        self.nii_header = nii_header
-        self.out_path = out_path
+
     
     def __save_file(self, data, name):
         data = np.squeeze(data)
         
         # Check dimensions of the header
         dims = np.shape(data)
-        self.nii_header.set_data_shape(dims)
+        self.__nii_header.set_data_shape(dims)
                 
         # Build NIFTI
-        nii = nib.Nifti1Image(data.astype(np.float32), self.nii_header.get_best_affine(), self.nii_header)
+        nii = nib.Nifti1Image(data.astype(np.float32), self.__nii_header.get_best_affine(), self.__nii_header)
     
         # Save it
-        fpath = os.path.join(self.out_path, name + '.nii.gz')
+        fpath = os.path.join(self.__out_path, name + '.nii.gz')
         nib.save(nii, fpath)
         return fpath
     
     def save(self):
+        """Once the instance matrix variables have been filled up. Call save to create the Nifti files in the 
+        `out_path` folder.
+        
+        :return: Dictionary with the paths and names for the output Nifti files.
+        """
         T2 = list()
         f = list()
         sources = list()
                 
         S = self.pd[:,:,:, None, None] * (self.f[:,:,:,:, None] * self.sources)
                 
-        for i in range(self.max_sources):
+        for i in range(self.__max_sources):
             T2.append(self.__save_file(self.T2[:,:,:,i],'T2_{}'.format(i)))
             f.append(self.__save_file(self.f[:,:,:,i],  'f_{}'.format(i)))
             sources.append(self.__save_file(S[:,:,:,i,:],'source_{}'.format(i)))

@@ -1,7 +1,7 @@
 '''
 Created on 8 Sep 2017
 
-@author: Miguel Molina Romero
+@author: Miguel Molina Romero, Techical University of Munich
 @contact: miguel.molina@tum.de
 @license: LPGL
 '''

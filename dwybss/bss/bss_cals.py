@@ -3,7 +3,7 @@ Created on 8 Sep 2017
 
 Constrained ALS (NMF) implementation (paper)
 
-@author: Miguel Molina Romero
+@author: Miguel Molina Romero, Techical University of Munich
 @contact: miguel.molina@tum.de
 @license: LPGL
 '''
@@ -42,6 +42,9 @@ class BssCals(BSS):
         Factorization, Computational Statistics and Data Analysis, vol. 52, no. 1, pp. 155-173.
         """
         
+#         if not (r == 48 and c == 49 and s == 13):
+#             return
+        
         X = np.squeeze(data)
         mask = np.squeeze(mask)
         
@@ -68,13 +71,12 @@ class BssCals(BSS):
             A [A <= 0] = eps
             A = self._bound_A(A,t2_bounds, tes)
             
-            d = X - np.dot(A,S)
-            dnorm = np.linalg.norm(d)
+            dnorm = np.linalg.norm(X - np.dot(A,S))
             da = np.max(np.abs(A-A0) / (eps + np.max(np.abs(A0))))
-            dh = np.max(np.abs(S-S0) / (eps + np.max(np.abs(S0))))
-            delta  = max((da, dh))
+            ds = np.max(np.abs(S-S0) / (eps + np.max(np.abs(S0))))
+            dfact  = max((da, ds))
              
-            if delta < params['tolx']:
+            if dfact < params['tolx']:
                 break
             if dnorm0-dnorm <= params['tolfun']*max((1,dnorm0)):
                 break
